@@ -1,3 +1,181 @@
+"""
+Módulo de Filtros y Procesamiento de Señales
+==========================================
+
+Este módulo se encarga del procesamiento y análisis de mensajes de trading,
+incluyendo la detección de señales, acciones y el seguimiento de mensajes relacionados.
+
+Funcionalidades Principales
+-------------------------
+1. Parsing de señales de trading
+2. Detección de acciones en mensajes
+3. Seguimiento de cadenas de respuestas
+4. Extracción de información adicional de trading
+
+Componentes del Sistema
+---------------------
+
+1. Parser de Señales (parse_senal)
+   Analiza y extrae información estructurada de señales de trading.
+
+   Ejemplo de señal:
+   ```
+   EURUSD
+   BUY ZONE 1.0500-1.0520
+   SL: 1.0450
+   TP: 1.0550-1.0600-1.0650
+   ```
+
+   Proceso de parsing:
+   a) Extrae el símbolo (ej: EURUSD)
+   b) Identifica tipo (BUY/SELL) y zona de entrada
+   c) Calcula precio de entrada óptimo:
+      - Para SELL: mínimo de zona + 0.5
+      - Para BUY: máximo de zona - 1
+   d) Extrae Stop Loss y Take Profit
+
+   Retorna:
+   ```python
+   {
+       'simbolo': 'EURUSD',
+       'tipo': 'BUY',
+       'entrada': 1.0519,  # Calculado automáticamente
+       'sl': 1.0450,
+       'tp': 1.0600       # Primer TP de la serie
+   }
+   ```
+
+2. Detector de Acciones (detectar_accion_mensaje)
+   Identifica comandos y acciones en mensajes de respuesta.
+
+   Acciones Soportadas:
+   ```
+   a) Ejecución:
+      - "hit entry" -> 'hit_entry'
+      - "buy now" -> 'buy_now'
+      - "sell now" -> 'sell_now'
+
+   b) Gestión:
+      - "close/exit" -> 'cerrar'
+      - "break even" -> 'be'
+      - "cancel" -> 'cancel'
+      - "round" -> 'round'
+
+   c) Resultados:
+      - "tp hit" -> 'tp'
+      - "sl hit" -> 'perdida'
+   ```
+
+   Ejemplos de Uso:
+   ```python
+   >>> detectar_accion_mensaje("Hit entry now!")
+   'hit_entry'
+   
+   >>> detectar_accion_mensaje("Move to break even")
+   'be'
+   
+   >>> detectar_accion_mensaje("TP1 hit")
+   'tp1'
+   ```
+
+3. Buscador de Señales (encontrar_senal_original)
+   Rastrea la cadena de respuestas para encontrar la señal original.
+
+   Funcionamiento:
+   ```
+   Señal Original
+        ↳ Respuesta 1
+             ↳ Respuesta 2 (acción)
+                  ↳ Respuesta 3
+   ```
+
+   Estados de Señal:
+   - "pendiente": Orden esperando ejecución
+   - "activa": Orden en mercado
+   - "cancelada": Orden cancelada
+   - "no_encontrada": No se halló la señal
+
+   Ejemplo de Uso:
+   ```python
+   msg_id, estado, texto = await encontrar_senal_original(
+       mensaje_actual,
+       client,
+       mensajes_senales,
+       ordenes_pendientes,
+       senales_activas,
+       senales_canceladas
+   )
+   ```
+
+4. Extractor de Info Adicional (extract_trade_info)
+   Obtiene detalles complementarios de trading.
+
+   Información Extraída:
+   ```python
+   {
+       'lotes': 0.1,      # Tamaño de la operación
+       'riesgo': 2.0,     # Porcentaje de riesgo
+       'ronda': 1         # Número de intento/ronda
+   }
+   ```
+
+   Ejemplos de Entrada:
+   ```
+   "Entry with lot size 0.1"
+   "Risk 2% on this trade"
+   "Round 2 for EURUSD"
+   ```
+
+Flujo de Procesamiento
+--------------------
+1. Recepción de mensaje
+2. Intento de parsing como señal
+3. Si no es señal, detección de acción
+4. Si es acción, búsqueda de señal original
+5. Extracción de información adicional
+
+Ejemplos de Uso Completo
+----------------------
+1. Procesamiento de Nueva Señal:
+   ```python
+   texto = '''
+   EURUSD
+   BUY ZONE 1.0500-1.0520
+   SL: 1.0450
+   TP: 1.0550-1.0600
+   Lot size: 0.1
+   '''
+   
+   # Parsear señal
+   senal = parse_senal(texto)
+   if senal:
+       info_adicional = extract_trade_info(texto)
+       # Combinar información
+       senal.update(info_adicional or {})
+   ```
+
+2. Procesamiento de Acción:
+   ```python
+   texto_respuesta = "Move to break even now"
+   accion = detectar_accion_mensaje(texto_respuesta)
+   if accion == 'be':
+       # Buscar señal original
+       id_original, estado, texto = await encontrar_senal_original(...)
+   ```
+
+Notas Importantes
+---------------
+- Las señales deben seguir el formato especificado
+- Las acciones son case-insensitive
+- El sistema maneja múltiples variantes de cada comando
+- Se implementa protección contra loops infinitos
+- Logging detallado para debugging
+
+Versión: 1.0.0
+Autor: Fran
+Última actualización: 2024-01-01
+"""
+
 import re
 import logging
 
