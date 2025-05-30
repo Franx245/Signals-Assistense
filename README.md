@@ -1,96 +1,104 @@
-# Trading Assistant - Automatización Inteligente de Trading
+# 🤖 Trading Assistant: Bridge Telegram-MT5
 
-## 📌 Resumen Ejecutivo
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-Sistema automatizado que conecta Telegram con MetaTrader 5 para ejecutar operaciones de trading de forma automática y precisa.
+## 🎯 Descripción Técnica
 
-## 🏗 Arquitectura del Sistema
+Sistema automatizado de alta precisión que implementa un bridge entre señales de Telegram y MetaTrader 5, utilizando procesamiento asíncrono y gestión de estados para garantizar la ejecución precisa de operaciones de trading.
+
+## 🏗 Arquitectura Core
 
 ```mermaid
 graph TD
-    A[Telegram] -->|Señales| B[Trading Assistant]
-    B -->|Órdenes| C[MetaTrader 5]
-    B -->|Logs| D[Sistema de Logging]
-    B -->|Estados| E[Gestión de Estado]
-    
-    subgraph Trading Assistant
-        B --> F[Monitor de Precios]
-        B --> G[Procesador de Señales]
-        B --> H[Gestor de Órdenes]
+    subgraph "📱 Telegram Integration"
+        A[Telegram Client] -->|Raw Messages| B[Message Parser]
+        B -->|Structured Data| C[Signal Processor]
     end
+    
+    subgraph "🧠 Signal Processing"
+        C -->|Trading Signal| D[Order Manager]
+        D -->|MT5 Commands| E[MT5 Bridge]
+        F[Price Monitor] -->|Real-time Prices| D
+    end
+    
+    subgraph "💾 State Management"
+        G[Active Signals]
+        H[Pending Orders]
+        I[Cancelled Orders]
+    end
+    
+    C -->|Update| G
+    D -->|Track| H
+    D -->|Archive| I
 ```
 
-## 🔄 Flujo de Operación
+## 🔍 Componentes Principales
+
+### 1. 🎯 Procesador de Señales (`filters.py`)
+
+```python
+def parse_senal(texto: str) -> dict:
+    """
+    Extrae información estructurada de señales de trading.
+    
+    Implementación:
+    - Regex pattern matching para símbolos: r'\b(XAUUSD|EURUSD|GBPUSD|USDJPY)\b'
+    - Extracción de zonas de trading: r'\b(BUY|SELL)\b.*?ZONE\s*(\d+\.?\d*)\s*-\s*(\d+\.?\d*)'
+    - Cálculo inteligente de entrada basado en tipo:
+        * SELL: rango_min + 0.5
+        * BUY: rango_max - 1
+    
+    Returns:
+        {
+            'simbolo': str,      # Par de trading
+            'tipo': str,         # BUY/SELL
+            'entrada': float,    # Precio calculado
+            'sl': float,         # Stop Loss
+            'tp': float         # Take Profit
+        }
+    """
+```
+
+### 2. 🔄 Sistema de Cascadas
 
 ```mermaid
 sequenceDiagram
-    participant T as Telegram
-    participant TA as Trading Assistant
-    participant MT5 as MetaTrader 5
-    participant Log as Sistema Logging
+    participant S as Señal Original
+    participant R1 as Respuesta 1
+    participant R2 as Respuesta 2
+    participant R3 as Respuesta 3
 
-    T->>TA: Nueva Señal
-    TA->>TA: Procesar Señal
-    TA->>MT5: Verificar Precio
-    MT5->>TA: Precio Actual
-    TA->>MT5: Ejecutar Orden
-    MT5->>TA: Confirmación
-    TA->>Log: Registrar Operación
+    Note over S: EURUSD BUY ZONE 1.0500-1.0520
+    S->>R1: hit entry
+    Note over R1: Ejecuta orden cuando precio = 1.0519
+    R1->>R2: be
+    Note over R2: Mueve SL a precio de entrada
+    R2->>R3: tp
+    Note over R3: Registra Take Profit alcanzado
 ```
 
-## 💻 Componentes Principales
+### 3. 🎮 Cliente MT5 (`mt5_client.py`)
 
-### 1. Monitor de Precios
 ```python
-class MonitorTask:
+def abrir_orden(symbol: str, order_type: str, lotes: float, 
+                sl: float = None, tp: float = None, 
+                entrada: float = None) -> int:
     """
-    🔍 Monitoreo 24/7 de precios
-    ⚡ Ejecución automática
-    📊 Seguimiento en tiempo real
+    Ejecuta órdenes en MT5 con gestión avanzada.
+    
+    Características:
+    - Cálculo dinámico de SL/TP basado en distancias
+    - Manejo de desviaciones de precio
+    - Magic number: 234000 para tracking
+    - Filling policy: IOC (Immediate or Cancel)
+    
+    Returns:
+        int: Ticket number de la orden
     """
 ```
 
-### 2. Procesador de Señales
-```yaml
-Formato de Señales:
-  EURUSD:
-    BUY ZONE: 1.0500-1.0520
-    SL: 1.0450
-    TP: 1.0550-1.0600-1.0650
-    Lot size: 0.1
-```
-
-### 3. Sistema de Comandos
-```bash
-# Comandos de Entrada
-hit entry   # Ejecutar orden pendiente
-buy now     # Compra inmediata
-sell now    # Venta inmediata
-
-# Comandos de Gestión
-be          # Break even
-tp          # Take profit
-close       # Cerrar posición
-
-# Comandos de Control
-cancel      # Cancelar orden
-round       # Reactivar señal
-list        # Listar órdenes
-```
-
-## 📊 Sistema de Logging
-
-```
-📁 Estructura de Logs
-├── data/
-│   └── logs/
-│       ├── trading_assistant.log  # Log principal
-│       ├── errors.log            # Registro de errores
-│       ├── daily_YYYYMM.json     # Estadísticas diarias
-│       └── actions_YYYYMM.jsonl  # Registro de acciones
-```
-
-## 🔄 Estados de Operación
+## 📊 Sistema de Estados
 
 ```mermaid
 stateDiagram-v2
@@ -104,107 +112,126 @@ stateDiagram-v2
     Cerrada --> [*]
 ```
 
-## ⚡ Ventajas sobre Operación Manual
+## 🔍 Detección de Acciones
 
-### Velocidad
-| Acción | Humano | Trading Assistant |
-|--------|---------|-------------------|
-| Lectura de señal | 5-10s | <1ms |
-| Ejecución | 10-15s | Instantánea |
-| Múltiples señales | Limitado | Ilimitado |
-
-### Precisión
-- ✅ 100% precisión en precios
-- ✅ Sin errores de entrada
-- ✅ Gestión exacta de SL/TP
-- ✅ Seguimiento perfecto
-
-### Disponibilidad
-- 🕒 Operación 24/7
-- 🎯 Sin fatiga
-- 📈 Sin emociones
-- 🔄 Reconexión automática
-
-## 🛡 Sistemas de Seguridad
-
-### Verificación Triple
 ```python
-1. Validación de señal
-2. Verificación de parámetros
-3. Confirmación de ejecución
+def detectar_accion_mensaje(texto: str) -> str:
+    """
+    Sistema de detección de acciones con prioridades:
+    
+    1. Validación de Round:
+       - Palabras inválidas: ["don't", "dont", "sl", "tp", "vip"]
+       
+    2. Comandos Inmediatos:
+       - "buy now" -> "buy_now"
+       - "sell now" -> "sell_now"
+       
+    3. Acciones Básicas:
+       - cerrar: ["close", "closing", "closed", "exit now"]
+       - be: ["break even", "move to be", "stop to entry"]
+       - cancel: ["cancel", "cancelar", "cancelled"]
+       - hit_entry: ["hit entry", "entry now", "execute now"]
+    """
 ```
 
-### Protección contra Fallos
+## 🔄 Flujo de Procesamiento
+
+```mermaid
+graph TD
+    A[Mensaje Telegram] -->|parse_senal| B{Es Señal?}
+    B -->|Sí| C[Procesar Señal]
+    B -->|No| D[detectar_accion_mensaje]
+    
+    C -->|Success| E[Almacenar en Redis]
+    C -->|Error| F[Log Error]
+    
+    D -->|Action Found| G[encontrar_senal_original]
+    G -->|Found| H[Ejecutar Acción]
+    G -->|Not Found| I[Log Warning]
+```
+
+## 🛠 Configuración
+
 ```python
-try:
-    # Operación principal
-except Exception:
-    # Recuperación automática
-    try:
-        # Reintento
-    except:
-        # Cierre seguro
-finally:
-    # Limpieza garantizada
+# MT5 Configuration
+MT5_CONFIG = {
+    'login': ID,
+    'password': "PASSWORD",
+    'server': "MetaQuotes-Demo",
+    'symbols': ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY",ETC]
+}
+
+# Logging Configuration
+LOG_CONFIG = {
+    'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    'date_format': '%Y-%m-%d %H:%M:%S',
+    'max_size': 10 * 1024 * 1024  # 10MB
+}
 ```
 
-## 📊 Panel de Control
+## 📈 Ejemplos de Uso
 
-```
-╔══════════════════════════════════════╗
-║     🤖 Trading Assistant v1.0.0      ║
-║        Telegram + MT5 Bridge         ║
-╚══════════════════════════════════════╝
+### 1. Procesamiento de Señal Compleja
+```python
+# Ejemplo de señal compleja
+signal = """
+EURUSD
+BUY ZONE 1.0500-1.0520
+SL: 1.0450
+TP: 1.0550-1.0600-1.0650
+Lot size: 0.1
+"""
 
-📈 Estadísticas:
-- Operaciones totales: 50
-- Win Rate: 70%
-- Uptime: 99.99%
-```
-
-## 🚀 Inicio Rápido
-
-```bash
-# 1. Configurar credenciales
-export MT5_LOGIN="tu_login"
-export MT5_PASSWORD="tu_password"
-
-# 2. Iniciar sistema
-python3 main.py
-
-# 3. Seleccionar canal
-> Elegí el número del canal: 1
-```
-
-## 📱 Notificaciones
-
-```yaml
-Alertas:
-  Críticas:
-    - ❌ Desconexión MT5
-    - ⚠️ Error de ejecución
-    - 🔴 Fallo de sistema
-  
-  Informativas:
-    - ✅ Orden ejecutada
-    - 💰 TP alcanzado
-    - 🔒 BE activado
+# Procesamiento
+parsed = parse_senal(signal)
+if parsed:
+    info = extract_trade_info(signal)
+    parsed.update(info or {})
+    
+# Resultado
+{
+    'simbolo': 'EURUSD',
+    'tipo': 'BUY',
+    'entrada': 1.0519,
+    'sl': 1.0450,
+    'tp': 1.0600,
+    'lotes': 0.1
+}
 ```
 
-## 🔧 Mantenimiento
+### 2. Gestión de Cascadas
+```python
+# Ejemplo de seguimiento de cascada
+async def process_cascade():
+    msg_id, estado, texto = await encontrar_senal_original(
+        mensaje_actual=current_msg,
+        client=telegram_client,
+        mensajes_senales=signals_dict,
+        ordenes_pendientes=pending_dict,
+        senales_activas=active_dict,
+        senales_canceladas=cancelled_dict
+    )
+```
 
-### Checklist Diario
-- [ ] Conexión MT5
-- [ ] Estado de logs
-- [ ] Espacio en disco
-- [ ] Rendimiento
+## 📊 Métricas y Logging
 
-## 📚 Recursos
-
-- [📖 Documentación MT5](https://www.metatrader5.com/es/automated-trading/api)
-- [🤖 API de Telegram](https://core.telegram.org/bots/api)
-- [📊 Guía de Trading](https://www.babypips.com/learn/forex)
+```python
+# Ejemplo de log estructurado
+{
+    'timestamp': '2024-01-20 10:15:00',
+    'level': 'INFO',
+    'event': 'signal_processed',
+    'data': {
+        'symbol': 'EURUSD',
+        'type': 'BUY',
+        'entry': 1.0519,
+        'sl': 1.0450,
+        'tp': 1.0600,
+        'status': 'success'
+    }
+}
+```
 
 ## 📄 Licencia
 
-MIT License - Copyright (c) 2024 Fran
+MIT License - Copyright (c) 2024 Franx245
